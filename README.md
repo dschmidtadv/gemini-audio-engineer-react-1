@@ -58,9 +58,13 @@ FFmpeg is required for audio extraction.
 - **macOS**: `brew install ffmpeg`
 
 ### ⚡ Run the API
-```bash
-uvicorn app:app --reload --port 8000
-```
+> [!IMPORTANT]
+> Since `audio_jobs` is located inside the `backend` directory, you **must** exclude it from uvicorn's reload watcher to prevent background jobs from being interrupted during processing.
+>
+> **Use this command:**
+> ```bash
+> uvicorn app:app --reload --reload-exclude "audio_jobs/*" --port 8000
+> ```
 
 ---
 

@@ -45,7 +45,7 @@ def extract_midi_from_audio(audio_path: str, output_midi_path: str):
 def extract_and_generate_midi(
 
     response_text: str,
-    output_dir: str = "static/midi"
+    output_dir: str = os.path.join("audio_jobs", "midi")
 ) -> Tuple[str, Optional[str]]:
     """
     Extract MIDI data from LLM response and generate a .mid file.

@@ -1,6 +1,9 @@
 import io
 import os
+import sys
 import tempfile
+import subprocess
+import shutil
 from typing import Tuple
 
 import librosa
@@ -81,6 +84,14 @@ def generate_mel_spectrogram_png(
     plt.colorbar(format="%+2.0f dB")
     plt.title("Mel-frequency spectrogram")
     plt.tight_layout()
+
+    print("📊 Generating PNG buffer...")
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png")
+    plt.close()
+    buf.seek(0)
+    return buf.read()
+
 import subprocess
 import shutil
 
@@ -95,15 +106,23 @@ def separate_stems_demucs(input_path: str, output_dir: str) -> bool:
         # -o output_dir: Output base directory
         # --device: Use CUDA if detected
         cmd = [
-            "python", "-m", "demucs",
+            sys.executable, "-m", "demucs",
             "--device", DEVICE,
             "-n", "htdemucs",
             "-o", output_dir,
             input_path
         ]
+
         
         print(f"🎬 Running Demucs: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, check=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+             print(f"❌ Demucs failed (Code {result.returncode})")
+             print(f"STDOUT: {result.stdout}")
+             print(f"STDERR: {result.stderr}")
+             raise Exception(f"Stem separation failed: {result.stderr or result.stdout}")
+
         print("✅ Demucs separation successful.")
         return True
     except subprocess.CalledProcessError as e:
@@ -123,12 +142,13 @@ def separate_stems_umx(input_path: str, output_dir: str) -> bool:
         # --device: Use CUDA if detected
         # -o output_dir: Output base directory
         cmd = [
-            "python", "-m", "openunmix.cli",
+            sys.executable, "-m", "openunmix.cli",
             input_path,
             "--model", "umxhq",
             "--device", DEVICE,
             "--outdir", output_dir
         ]
+
         
         print(f"🎬 Running Open-Unmix: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, check=True, text=True)

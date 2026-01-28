@@ -29,23 +29,21 @@ app = FastAPI(title="Gemini Audio Engineer API")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    # This catches ALL errors (Quota, API keys, Crashes)
-    # and forces them to return as JSON so the frontend can read them.
-    print(f"🔥 CAUGHT EXCEPTION: {exc}")
+    import traceback
+    error_msg = f"🔥 CAUGHT EXCEPTION: {str(exc)}\n{traceback.format_exc()}"
+    print(error_msg)
     return JSONResponse(
         status_code=400, 
-        content={"detail": str(exc)}
+        content={"detail": str(exc), "traceback": traceback.format_exc()}
     )
+
 
 # Track which provider each session uses for follow-up routing
 _session_providers: dict[str, str] = {}  # session_id -> "gemini" | "openai"
 
-# Create static directory for MIDI files
-MIDI_OUTPUT_DIR = "static/midi"
-os.makedirs(MIDI_OUTPUT_DIR, exist_ok=True)
+# Mount audio_jobs directory for artifact access (includes all jobs and their internal folders)
+app.mount("/audio_jobs", StaticFiles(directory="audio_jobs"), name="audio_jobs")
 
-# Mount static files for MIDI downloads
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Dev CORS Next.js default
 app.add_middleware(
@@ -77,16 +75,17 @@ async def process_audio(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     model: str = Form("demucs"),
+    job_id: Optional[str] = Form(None),
 ):
     """
     Starts the full Phase 1 processing pipeline (Stems + MIDI) as a background job.
     Uses Phase 2D job queuing.
     """
-    # 1. Save upload to temporary location
+    # 1. Save upload to temporary location (only if not already in job)
     temp_path = _save_upload_to_temp(file)
 
-    # 2. Initialize the job
-    pipeline = AudioJobPipeline()
+    # 2. Initialize or retrieve the job
+    pipeline = AudioJobPipeline(job_id)
     job_id = pipeline.initialize_job(temp_path)
 
     # 3. Queue the heavy processing with semaphore enforcement
@@ -104,9 +103,15 @@ async def get_job_status(job_id: str):
     """
     pipeline = AudioJobPipeline(job_id)
     status = pipeline.get_status()
-    if "error" in status:
-        return JSONResponse(status_code=404, content=status)
+    # Fix: Correctly check if there is an ACTUAL error message
+    if status.get("error") is not None:
+        return JSONResponse(status_code=400, content=status)
+    
+    if "error" in status and status["error"] == "Job not found":
+         return JSONResponse(status_code=404, content=status)
+
     return status
+
 
 
 
@@ -136,15 +141,21 @@ def analyze(
     temperature: float = Form(0.2),
     thinkingBudget: int = Form(0),
     mode: str = Form("engineer"),
+    job_id: Optional[str] = Form(None),
 ):
     try:
         """
         Trims audio, generates spectrogram, starts Chat Session with Gemini or OpenAI.
-        Returns initial advice + session ID.
+        Everything is consolidated under audio_jobs/<job_id>/.
+        Returns initial advice + job_id as session ID.
         """
         original_path = _save_upload_to_temp(file)
         trimmed_path = trim_audio_to_temp(original_path, startSec, endSec, export_format="wav")
         spec_png = generate_mel_spectrogram_png(trimmed_path)
+
+        # Initialize/Retrieve Job
+        pipeline = AudioJobPipeline(job_id)
+        job_id = pipeline.initialize_job(original_path) # Ensure input.wav exists in job folder
 
         # Route to appropriate provider based on model ID
         if modelId.startswith("gpt-"):
@@ -173,15 +184,18 @@ def analyze(
         if advice is None:
             raise Exception("AI Model returned no response. Check API Key and Model ID.")
 
-        # MIDI Generation
-        clean_advice, midi_filename = extract_and_generate_midi(advice, MIDI_OUTPUT_DIR)
-        midi_url = f"/static/midi/{midi_filename}" if midi_filename else None
+        # Save AI Advice to Analysis Folder
+        pipeline.save_analysis(advice)
+
+        # Use the job_id as the session identifier for chat routing
+        # (Updating _session_providers mapping to use job_id if necessary, 
+        # but here session_id is still returned for internal chat logic)
 
         return {
             "sessionId": session_id,
-            "advice": clean_advice,
+            "jobId": job_id,
+            "advice": advice,
             "spectrogramPngBase64": base64.b64encode(spec_png).decode("utf-8"),
-            "midiDownloadUrl": midi_url,
         }
     except Exception as e:
         # CATCH ALL ERRORS HERE
@@ -196,6 +210,7 @@ def analyze(
 def chat_reply(
     sessionId: str = Form(...),
     message: str = Form(...),
+    jobId: Optional[str] = Form(None),
 ):
     """
     Send a follow-up message to an active session.
@@ -206,12 +221,49 @@ def chat_reply(
     else:
         reply = gemini_send_message(sessionId, message)
 
-    # Process MIDI data from response
-    clean_reply, midi_filename = extract_and_generate_midi(reply, MIDI_OUTPUT_DIR)
-    midi_url = f"/static/midi/{midi_filename}" if midi_filename else None
+    if not reply:
+        raise Exception("AI Model returned no response.")
+
+    # If we have a jobId, save this follow-up advice
+    if jobId:
+        pipeline = AudioJobPipeline(jobId)
+        # Append to advice instead of overwriting, or save as a separate follow-up
+        advice_path = os.path.join(pipeline.analysis_dir, "advice.txt")
+        with open(advice_path, "a", encoding="utf-8") as f:
+            f.write(f"\n\n--- Follow-up ---\nUser: {message}\nAI: {reply}")
 
     return {
-        "reply": clean_reply,
-        "midiDownloadUrl": midi_url,
+        "reply": reply,
     }
+
+@app.get("/api/jobs/{job_id}/analysis")
+def download_advice(job_id: str):
+    """
+    Returns the advice.txt file for a specific job.
+    """
+    pipeline = AudioJobPipeline(job_id)
+    advice_path = os.path.join(pipeline.analysis_dir, "advice.txt")
+    if not os.path.exists(advice_path):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=404, content={"detail": "Advice not found"})
+    
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        advice_path, 
+        media_type="text/plain", 
+        filename=f"mixing_advice_{job_id[:8]}.txt"
+    )
+
+@app.get("/api/jobs/{job_id}/midi-list")
+def list_midi_files(job_id: str):
+    """
+    Dynamically lists all MIDI files available for a specific job.
+    This allows the UI to show tracks that were generated but not hardcoded.
+    """
+    pipeline = AudioJobPipeline(job_id)
+    if not os.path.exists(pipeline.midi_dir):
+        return {"midi": []}
+    
+    files = [f for f in os.listdir(pipeline.midi_dir) if f.endswith(".mid")]
+    return {"midi": files}
 

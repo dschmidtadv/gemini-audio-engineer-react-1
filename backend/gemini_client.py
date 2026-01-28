@@ -67,10 +67,16 @@ def start_audio_chat_session(
         # Wait 1 second before checking again
         time.sleep(1)
 
+    audio_part = types.Part.from_uri(
+        file_uri=uploaded_audio.uri,
+        mime_type=uploaded_audio.mime_type or "audio/wav",
+    )
+
     spectrogram_part = types.Part.from_bytes(
         data=spectrogram_png_bytes,
         mime_type="image/png",
     )
+
 
     # Configure Thinking if requested (assuming model supports it)
     # Note: 'thinking_config' is strictly for models that support it (e.g. gemini-2.0-flash-thinking-exp)
@@ -93,8 +99,9 @@ def start_audio_chat_session(
 
     # Send initial message with context
     response = chat.send_message(
-        message=[user_prompt, uploaded_audio, spectrogram_part]
+        message=[user_prompt, audio_part, spectrogram_part]
     )
+
 
     session_id = str(uuid.uuid4())
     _sessions[session_id] = chat

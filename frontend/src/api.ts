@@ -49,9 +49,10 @@ interface AnalyzeAudioParams {
   temperature: number;
   thinkingBudget?: number;
   mode?: string;
+  jobId?: string;
 }
 
-export async function analyzeAudio({ file, startSec, endSec, prompt, modelId, temperature, thinkingBudget, mode }: AnalyzeAudioParams) {
+export async function analyzeAudio({ file, startSec, endSec, prompt, modelId, temperature, thinkingBudget, mode, jobId }: AnalyzeAudioParams) {
   const fd = new FormData();
   fd.append("prompt", prompt);
   fd.append("modelId", modelId);
@@ -61,6 +62,7 @@ export async function analyzeAudio({ file, startSec, endSec, prompt, modelId, te
   fd.append("temperature", String(temperature));
   if (thinkingBudget) fd.append("thinkingBudget", String(thinkingBudget));
   fd.append("file", file);
+  if (jobId) fd.append("job_id", jobId);
 
   const res = await fetch(`${API_BASE}/api/analyze`, {
     method: "POST",
@@ -70,10 +72,11 @@ export async function analyzeAudio({ file, startSec, endSec, prompt, modelId, te
   return handleResponse(res, "Failed to analyze audio.");
 }
 
-export async function sendChatMessage(sessionId: string, message: string) {
+export async function sendChatMessage(sessionId: string, message: string, jobId?: string) {
   const fd = new FormData();
   fd.append("sessionId", sessionId);
   fd.append("message", message);
+  if (jobId) fd.append("jobId", jobId);
 
   const res = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
@@ -82,10 +85,11 @@ export async function sendChatMessage(sessionId: string, message: string) {
 
   return handleResponse(res, "Failed to send message.");
 }
-export async function startAudioProcessing(file: File, model: string = "demucs") {
+export async function startAudioProcessing(file: File, model: string = "demucs", jobId?: string) {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("model", model);
+  if (jobId) fd.append("job_id", jobId);
 
   const res = await fetch(`${API_BASE}/api/process`, {
     method: "POST",
@@ -99,5 +103,9 @@ export async function startAudioProcessing(file: File, model: string = "demucs")
 export async function getJobStatus(jobId: string) {
   const res = await fetch(`${API_BASE}/api/process/${jobId}`);
   return handleResponse(res, "Failed to fetch job status.");
+}
+
+export function getAdviceDownloadUrl(jobId: string) {
+  return `${API_BASE}/api/jobs/${jobId}/analysis`;
 }
 

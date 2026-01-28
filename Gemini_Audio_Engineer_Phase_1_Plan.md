@@ -177,5 +177,14 @@ This keeps responsibilities clean.
 - Support long-running jobs
 - Feed real musical artifacts into Gemini
 
+## Execution Instruction (Uvicorn)
+> [!IMPORTANT]
+> Running the backend with `--reload` while jobs write to `audio_jobs/` will trigger server restarts and interrupt background tasks.
+>
+> **Use this command:**
+> ```bash
+> uvicorn app:app --reload --reload-exclude "audio_jobs/*" --port 8000
+> ```
+
 ## Phase 1 Result
 A production‑ready audio analysis and transformation backend that feeds high‑quality stems and MIDI into AI reasoning.

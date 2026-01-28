@@ -6,7 +6,10 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 # Constants
-BASE_JOBS_DIR = os.path.join(os.path.dirname(__file__), "static", "jobs")
+BASE_JOBS_DIR = os.path.join(os.path.dirname(__file__), "audio_jobs")
+
+print(f"🛤️ BASE_JOBS_DIR resolved to: {BASE_JOBS_DIR}")
+print(f"📍 Current Working Directory: {os.getcwd()}")
 
 
 class AudioJobPipeline:
@@ -21,17 +24,24 @@ class AudioJobPipeline:
     """
 
     def __init__(self, job_id: Optional[str] = None):
-        self.job_id = job_id or str(uuid.uuid4())
+        self.job_id = (job_id or str(uuid.uuid4())).strip()
         self.job_dir = os.path.join(BASE_JOBS_DIR, self.job_id)
         self.stems_dir = os.path.join(self.job_dir, "stems")
         self.midi_dir = os.path.join(self.job_dir, "midi")
+        self.analysis_dir = os.path.join(self.job_dir, "analysis")
         self.status_path = os.path.join(self.job_dir, "status.json")
+        print(f"🏗️ Pipeline initialized for Job: {self.job_id}")
+        print(f"📁 Target Job Directory: {self.job_dir}")
+        print(f"📝 Target Status Path: {self.status_path}")
+
 
     def initialize_job(self, input_audio_path: str) -> str:
         """Create job directory structure and store input file."""
+        print(f"📦 Initializing job {self.job_id} in {self.job_dir}")
         os.makedirs(self.job_dir, exist_ok=True)
         os.makedirs(self.stems_dir, exist_ok=True)
         os.makedirs(self.midi_dir, exist_ok=True)
+        os.makedirs(self.analysis_dir, exist_ok=True)
 
         # Copy input file to job directory
         dest_input = os.path.join(self.job_dir, "input.wav")
@@ -39,6 +49,10 @@ class AudioJobPipeline:
 
         self.update_status("initialized", progress=0)
         return self.job_id
+
+    @property
+    def midi_output_dir(self) -> str:
+        return self.midi_dir
 
     def update_status(self, state: str, progress: int = 0, message: str = "", error: Optional[str] = None):
         """Update status.json with current progress."""
@@ -51,20 +65,49 @@ class AudioJobPipeline:
             "updated_at": datetime.now().isoformat(),
             "artifacts": {
                 "stems": [f for f in os.listdir(self.stems_dir)] if os.path.exists(self.stems_dir) else [],
-                "midi": [f for f in os.listdir(self.midi_dir)] if os.path.exists(self.midi_dir) else []
+                "midi": [f for f in os.listdir(self.midi_dir)] if os.path.exists(self.midi_dir) else [],
+                "analysis": [f for f in os.listdir(self.analysis_dir)] if os.path.exists(self.analysis_dir) else []
             }
         }
         with open(self.status_path, "w") as f:
             json.dump(status, f, indent=4)
 
+    def save_analysis(self, advice_text: str):
+        """Save AI mixing advice to the analysis directory."""
+        os.makedirs(self.analysis_dir, exist_ok=True)
+        advice_path = os.path.join(self.analysis_dir, "advice.txt")
+        with open(advice_path, "w", encoding="utf-8") as f:
+            f.write(advice_text)
+        print(f"📄 Analysis saved to: {advice_path}")
+
     def get_status(self) -> Dict[str, Any]:
         """Read the current status.json."""
-        if not os.path.exists(self.status_path):
+        print(f"🔍 Checking status at: {self.status_path}")
+        if not os.path.exists(self.status_path): 
+            print(f"❌ Status file NOT FOUND at: {self.status_path}")
             return {"error": "Job not found"}
         with open(self.status_path, "r") as f:
             return json.load(f)
 
+
 from reaper_engine import generate_reaper_project
+from audio_processor import (
+    separate_stems_demucs, 
+    separate_stems_umx, 
+    split_vocals_basic, 
+    split_drums_basic, 
+    split_other_basic
+)
+from midi_engine import extract_midi_from_audio, summarize_midi_file
+from gemini_client import validate_midi_with_gemini
+
+def _move_umx_stems(output_dir: str, stems_dir: str):
+    """Open-Unmix saves stems directly in the outdir as vocals.wav, etc."""
+    for stem in ["vocals.wav", "drums.wav", "bass.wav", "other.wav"]:
+        src = os.path.join(output_dir, stem)
+        if os.path.exists(src):
+            shutil.move(src, os.path.join(stems_dir, stem))
+
 
 def start_processing_pipeline(job_id: str, separation_model: str = "demucs"):
     """
@@ -181,12 +224,6 @@ def start_processing_pipeline(job_id: str, separation_model: str = "demucs"):
             json.dump(current_status, f, indent=4)
 
         pipeline.update_status("success", progress=100, message="Processing complete. Deep stems, MIDI, and REAPER Project are ready.")
-    except Exception as e:
-        import traceback
-        error_msg = f"{str(e)}\n{traceback.format_exc()}"
-        print(f"🔥 Pipeline Error: {error_msg}")
-        pipeline.update_status("failed", error=str(e), message="An error occurred during processing.")
-
     except Exception as e:
         import traceback
         error_msg = f"{str(e)}\n{traceback.format_exc()}"

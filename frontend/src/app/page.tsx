@@ -120,14 +120,15 @@ export default function Page() {
                 temperature,
                 thinkingBudget,
                 mode,
+                jobId: jobId || undefined,
             });
 
             setSessionId(data.sessionId);
+            setJobId(data.jobId);
             setSpectrogramB64(data.spectrogramPngBase64);
             setChatMessages(prev => [...prev, {
                 role: "model",
                 text: data.advice,
-                midiDownloadUrl: data.midiDownloadUrl
             }]);
         } catch (e: any) {
             setError(e?.message || String(e));
@@ -144,11 +145,10 @@ export default function Page() {
         setReplyInput("");
         setChatMessages(prev => [...prev, { role: "user", text: msg }]);
         try {
-            const data = await sendChatMessage(sessionId, msg);
+            const data = await sendChatMessage(sessionId, msg, jobId || undefined);
             setChatMessages(prev => [...prev, {
                 role: "model",
                 text: data.reply,
-                midiDownloadUrl: data.midiDownloadUrl
             }]);
         } catch (e: any) {
             setError(e?.message || String(e));
@@ -164,7 +164,7 @@ export default function Page() {
         setJobLoading(true);
         setJobStatus(null);
         try {
-            const data = await startAudioProcessing(file, profModel);
+            const data = await startAudioProcessing(file, profModel, jobId || undefined);
             setJobId(data.job_id);
             setPollingActive(true);
         } catch (e: any) {
@@ -407,7 +407,7 @@ export default function Page() {
                                             <StemPlayer
                                                 stems={jobStatus.artifacts.stems.map((s: string) => ({
                                                     name: s.replace(".wav", ""),
-                                                    url: `http://localhost:8000/static/jobs/${jobId}/stems/${s}`
+                                                    url: `http://localhost:8000/audio_jobs/${jobId}/stems/${s}`
                                                 }))}
                                             />
 
@@ -417,41 +417,68 @@ export default function Page() {
                                                 validationReport={jobStatus.validation_report}
                                             />
 
-                                            <div className="card" style={{ background: 'rgba(45, 212, 191, 0.1)', borderColor: 'var(--accent-secondary)' }}>
-                                                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <div className="stack" style={{ gap: '4px' }}>
-                                                        <label style={{ color: 'var(--accent-secondary)' }}>🏁 DAW Ready: REAPER Project</label>
-                                                        <p style={{ fontSize: '0.75rem' }}>Full session with stems and MIDI tracks mapped and ready.</p>
-                                                    </div>
-                                                    <a
-                                                        href={`http://localhost:8000/static/jobs/${jobId}/${jobStatus.artifacts.project[0]}`}
-                                                        download
-                                                        className="btn"
-                                                        style={{ background: 'var(--accent-secondary)', color: '#000' }}
-                                                    >
-                                                        EXPORT TO REAPER (.RPP)
-                                                    </a>
-                                                </div>
-                                            </div>
+                                            <div className="stack" style={{ gap: '16px' }}>
+                                                <label style={{ fontSize: '0.8rem', color: 'var(--accent-secondary)', fontWeight: 600 }}>📦 Download All Artifacts</label>
 
-                                            <div className="stack" style={{ gap: '8px' }}>
-                                                <label style={{ fontSize: '0.7rem' }}>Individual Raw Artifacts</label>
-                                                <div className="row" style={{ gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                                    <div className="stack" style={{ gap: '4px' }}>
-                                                        <span style={{ fontSize: '0.65rem' }}>Stems</span>
-                                                        {jobStatus.artifacts.stems.map((s: string) => (
-                                                            <a key={s} href={`http://localhost:8000/static/jobs/${jobId}/stems/${s}`} download className="pill" style={{ textAlign: 'center', textDecoration: 'none', fontSize: '10px' }}>{s}</a>
-                                                        ))}
+                                                <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+                                                    {/* Mixing Advice */}
+                                                    {jobStatus.artifacts.analysis?.includes("advice.txt") && (
+                                                        <div className="card" style={{ padding: '12px', background: 'rgba(255,255,255,0.03)' }}>
+                                                            <div className="stack" style={{ gap: '6px' }}>
+                                                                <span style={{ fontSize: '0.7rem' }}>📝 AI Mixing Advice (Manual Reference)</span>
+                                                                <a
+                                                                    href={`http://localhost:8000/api/jobs/${jobId}/analysis`}
+                                                                    download
+                                                                    className="btn secondary"
+                                                                    style={{ fontSize: '0.75rem', padding: '6px 10px' }}
+                                                                >
+                                                                    Download advice.txt
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* REAPER Project */}
+                                                    {jobStatus.artifacts.project && jobStatus.artifacts.project[0] && (
+                                                        <div className="card" style={{ padding: '12px', background: 'rgba(45, 212, 191, 0.1)', borderColor: 'var(--accent-secondary)' }}>
+                                                            <div className="stack" style={{ gap: '6px' }}>
+                                                                <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>🏁 REAPER Project</span>
+                                                                <a
+                                                                    href={`http://localhost:8000/audio_jobs/${jobId}/${jobStatus.artifacts.project[0]}`}
+                                                                    download
+                                                                    className="btn"
+                                                                    style={{ fontSize: '0.75rem', padding: '6px 10px', background: 'var(--accent-secondary)', color: '#000' }}
+                                                                >
+                                                                    Export .RPP Full Session
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="hr" style={{ opacity: 0.1 }} />
+
+                                                <div className="row" style={{ gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                                    <div className="stack" style={{ gap: '8px' }}>
+                                                        <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Individual Stems (.wav)</span>
+                                                        <div className="stack" style={{ gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
+                                                            {jobStatus.artifacts.stems.map((s: string) => (
+                                                                <a key={s} href={`http://localhost:8000/audio_jobs/${jobId}/stems/${s}`} download className="pill" style={{ textAlign: 'center', textDecoration: 'none', fontSize: '11px', padding: '4px 8px' }}>{s}</a>
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                    <div className="stack" style={{ gap: '4px' }}>
-                                                        <span style={{ fontSize: '0.65rem' }}>MIDI</span>
-                                                        {jobStatus.artifacts.midi.map((m: string) => (
-                                                            <a key={m} href={`http://localhost:8000/static/jobs/${jobId}/midi/${m}`} download className="pill" style={{ textAlign: 'center', textDecoration: 'none', background: 'rgba(129, 140, 248, 0.1)', fontSize: '10px' }}>{m}</a>
-                                                        ))}
+                                                    <div className="stack" style={{ gap: '8px' }}>
+                                                        <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>MIDI Extractions (.mid)</span>
+                                                        <div className="stack" style={{ gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
+                                                            {jobStatus.artifacts.midi.map((m: string) => (
+                                                                <a key={m} href={`http://localhost:8000/audio_jobs/${jobId}/midi/${m}`} download className="pill" style={{ textAlign: 'center', textDecoration: 'none', background: 'rgba(129, 140, 248, 0.1)', fontSize: '11px', padding: '4px 8px' }}>{m}</a>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
+
                                     )}
 
                                 </div>
