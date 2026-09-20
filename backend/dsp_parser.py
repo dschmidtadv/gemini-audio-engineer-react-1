@@ -21,8 +21,14 @@ def extract_dsp_actions(response_text: str) -> Tuple[str, Optional[dict]]:
         summary_parts = []
         if "eq" in dsp_actions and isinstance(dsp_actions["eq"], list):
             summary_parts.append(f"{len(dsp_actions['eq'])} EQ bands")
+        if "de_esser" in dsp_actions:
+            summary_parts.append("De-esser")
         if "compressor" in dsp_actions:
             summary_parts.append("Compressor")
+        if "reverb" in dsp_actions:
+            summary_parts.append("Reverb")
+        if "saturation" in dsp_actions:
+            summary_parts.append("Saturation")
         if "stereo" in dsp_actions:
             summary_parts.append("Stereo Width")
             

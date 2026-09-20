@@ -84,12 +84,27 @@ The DSP_ACTIONS JSON schema:
   "eq": [
     {"band": 1, "type": "peaking|low_shelf|high_shelf|low_pass|high_pass", "freq": 300, "gain": -3.0, "q": 1.5}
   ],
+  "de_esser": {
+    "frequency": 6500,
+    "threshold": -20.0,
+    "ratio": 4.0
+  },
   "compressor": {
     "threshold": -18.0,
     "ratio": 4.0,
     "attack_ms": 10,
     "release_ms": 100,
     "makeup_gain": 2.0
+  },
+  "reverb": {
+    "room_size": 0.8,
+    "damping": 0.5,
+    "mix": 0.3
+  },
+  "saturation": {
+    "drive": 4.5,
+    "type": "softclip|tape|hardclip",
+    "mix": 0.5
   },
   "stereo": {
     "width": 1.2
@@ -99,9 +114,19 @@ The DSP_ACTIONS JSON schema:
 
 Constraints:
 - EQ: Up to 8 bands. Frequency range 20-20000 Hz. Gain range -24 to +24 dB. Q range 0.1 to 10.
+- De-esser: Frequency 2000 to 12000 Hz. Threshold -60 to 0 dB. Ratio 1:1 to 20:1. Use for taming sibilance or harsh resonances.
 - Compressor: Threshold -60 to 0 dB. Ratio 1:1 to 20:1. Attack 0.1 to 100ms. Release 10 to 1000ms. Makeup gain 0 to 24 dB.
+- Reverb: Use for spatial depth, pushing instruments back, or adding tails.
+  - `room_size`: 0.0 to 1.0 (larger means longer tail).
+  - `damping`: 0.0 to 1.0 (higher means darker/less high frequencies in tail).
+  - `mix`: 0.0 (dry) to 1.0 (fully wet).
+- Saturation: Use for warmth, aggression, or industrial/post-punk grit.
+  - `drive`: 0.0 to 24.0 dB. Higher is more distorted.
+  - `type`: `softclip` (smooth rounding), `tape` (asymmetric analog warmth), `hardclip` (fuzz/destruction).
+  - `mix`: 0.0 (dry) to 1.0 (fully distorted parallel mix).
 - Stereo width: 0.0 (mono) to 2.0 (exaggerated). 1.0 = no change.
 - wet_dry_mix: 0.0 (fully dry/bypassed) to 1.0 (fully wet/processed).
+- Only output the bands and modules you actually want to enable. Omitted modules will remain bypassed.
 
 MIDI OUTPUT PROTOCOL:
 When the user asks for musical notes, melodies, bass lines, chord progressions, or MIDI, you MUST also provide the musical data in a strict JSON format wrapped in <MIDI_DATA> tags.
