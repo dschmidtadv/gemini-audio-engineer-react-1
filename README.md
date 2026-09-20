@@ -1,106 +1,44 @@
-# Gemini Audio Engineer: Professional Studio Maturation
+# Gemini Audio Engineer (Backend & Web Interface) 🧠🎛️
 
-A vibe-coded **Mix Assistant AI** that has evolved into a professional-grade studio assistant, bridging the gap between raw audio and a ready-to-mix DAW session.
+This repository contains the intelligence layer for the **Gemini Audio Engineer** ecosystem. It provides a FastAPI server that acts as the bridge between your Digital Audio Workstation (via the AUv3 plugin) and Google's Gemini AI.
 
-- **Next.js (App Router) frontend**: Real-time waveform analysis, multi-track studio mixer, and MIDI piano roll preview.
-- **FastAPI backend**: Heavy-duty audio processing pipeline with background job queuing and GPU acceleration.
-- **Professional Pipeline**: Multi-model stem separation (Demucs/UMX), polyphonic MIDI extraction (basic-pitch), and Gemini musical validation.
+## 🌟 Overview
 
-## 🚀 Key Features
+When the AUv3 plugin captures audio from your DAW, it sends it here. This backend handles:
+1. **Audio Processing:** Slicing, normalizing, and generating detailed spectrograms of the captured audio.
+2. **AI Inference:** Packaging the audio context and spectrograms and sending them to Gemini with specialized Mixing, Producing, and Executing prompts.
+3. **DSP Parsing:** Converting the AI's natural language mixing advice into a strict, structured JSON payload.
+4. **Delivery:** Serving that JSON back to the AUv3 plugin so it can instantly apply the EQ, Compression, Saturation, De-essing, and Reverb parameters to your track.
 
-### 1. 🎛️ AI Consultation & Analysis
-- **Spectrogram Preview**: Visual frequency analysis to identify mix issues.
-- **Multi-Model Support**: Gemini 2.0/3.0 (Visual + Audio) and OpenAI GPT Audio.
-- **Contextual Chat**: Professional mixing advice with a persistent consultation session.
+## 🚀 Getting Started
 
-### 2. 🎼 Deep Stem Separation
-Splits a full track into **9 distinct stems** using ML-based separation (Demucs v4 / Open-Unmix):
-- **Vocals**: Lead & Backing (stereo-field isolated).
-- **Drums**: Kick, Snare, and Hats (spectral-filtered).
-- **Instruments**: Bass, Guitars, Keys/Synth, and Harmony.
+### Prerequisites
+- Python 3.11+
+- A valid Google Gemini API key
 
-### 3. 🎹 Structured MIDI Extraction
-Automated polyphonic transcription using **Spotify's basic-pitch**:
-- Generates mapped MIDI files for Melody, Bass, Guitars, and Keys.
-- **Gemini Musical Validation**: AI audits every MIDI file for pitch, rhythm, and harmonic correctness.
+### Installation
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+2. Set up your virtual environment and install dependencies:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+3. Set your environment variables in `.env`:
+   ```bash
+   GEMINI_API_KEY=your_api_key_here
+   ```
 
-### 4. 🏁 DAW Integration (REAPER)
-- **One-Click Export**: Generates a standard `.RPP` (REAPER Project) file.
-- **Automated Routing**: Stems and MIDI are pre-mapped to color-coded tracks, ready for mixing.
-
----
-
-## 🛠️ 1) Backend Setup
-
+### Running the Server
+Run the FastAPI application using `uvicorn`:
 ```bash
-cd backend
-python -m venv .venv
-
-# Activate:
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-
-pip install -r requirements.txt
+source .venv/bin/activate
+uvicorn app:app --reload --port 8000
 ```
+The AUv3 plugin automatically polls `http://localhost:8000/health` to confirm the connection.
 
-### Dependencies Note
-For professional stem and MIDI features, ensure the following are installed:
-`demucs`, `openunmix`, `basic-pitch`, `pretty-midi`, `librosa`, `soundfile`, `torch`.
-
-### Environment Configuration
-Copy `.env.example` to `.env` and add:
-- `GEMINI_API_KEY`: Required for analysis and MIDI validation.
-- `FFMPEG_PATH`: (Optional) Path to FFmpeg binaries if not in PATH.
-
-### FFmpeg Dependency
-FFmpeg is required for audio extraction.
-- **Windows**: `winget install Gyan.FFmpeg`
-- **macOS**: `brew install ffmpeg`
-
-### ⚡ Run the API
-> [!IMPORTANT]
-> Since `audio_jobs` is located inside the `backend` directory, you **must** exclude it from uvicorn's reload watcher to prevent background jobs from being interrupted during processing.
->
-> **Use this command:**
-> ```bash
-> uvicorn app:app --reload --reload-exclude "audio_jobs/*" --port 8000
-> ```
-
----
-
-## 🎨 2) Frontend Setup
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-Open `http://localhost:3000`
-
----
-
-## 🎹 Professional Workflow
-
-1. **Upload & Analyze**: Use the "Engineer" or "Producer" modes for immediate AI feedback.
-2. **Deep Extraction**: Toggle between **Demucs v4** or **Open-Unmix** and start a background job.
-3. **Mix & Audit**: Audition your stems in the **In-Browser Mixer** and check the **MIDI Piano Roll**.
-4. **Validation**: Read the **Gemini Validation Report** for musical critique.
-5. **DAW Sync**: Download the `.RPP` project and start producing!
-
----
-
-## 🏗️ Architecture
-- **Job Manager**: Uses an async semaphore to prevent GPU VRAM exhaustion during heavy ML tasks.
-- **Pipeline Orchestration**: Chained processing from raw upload -> 4-stem split -> 9-track refinement -> MIDI extraction -> AI Validation -> RPP Generation.
-- **Static Store**: Filesystem-based persistence for long-running jobs.
-
----
-
-### Model Comparison
-
-| Model | Multi-Track | MIDI Logic | Best For |
-|-------|-------------|------------|----------|
-| Gemini 3 Pro | ✅ Visuals | ✅ Pro | Advanced Production Advice |
-| Gemini 2.0 Flash | ✅ Speed | ✅ Fast | General Mix Checks |
-| GPT Audio | ❌ Visuals | ❌ No | Pure Audio Conversations |
-| Local ML (Demucs) | ✅ Stems | ✅ MIDI | Source Extraction |
+## 🧩 Modifying the AI Prompts
+If you want to train the AI to focus on specific genres or add new DSP tools, check out `backend/prompts.py` and `backend/dsp_parser.py`. The AI has been heavily tuned to provide conservative, realistic mixing moves rather than destructive changes.
