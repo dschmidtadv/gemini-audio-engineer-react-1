@@ -21,6 +21,7 @@ from openai_client import (
     send_chat_message as openai_send_message,
 )
 from midi_engine import extract_and_generate_midi
+from dsp_parser import extract_dsp_actions
 from audio_pipeline import AudioJobPipeline, start_processing_pipeline, BASE_JOBS_DIR
 from job_manager import run_heavy_task
 
@@ -193,6 +194,8 @@ def analyze(
         midi_output_dir = os.path.join(BASE_JOBS_DIR, "chat_midi")
         clean_advice, midi_filename = extract_and_generate_midi(advice, output_dir=midi_output_dir)
         
+        clean_advice, dsp_actions = extract_dsp_actions(clean_advice)
+
         midi_url = None
         if midi_filename:
             midi_url = f"/audio_jobs/chat_midi/{midi_filename}"
@@ -208,6 +211,7 @@ def analyze(
             "advice": clean_advice,
             "spectrogramPngBase64": base64.b64encode(spec_png).decode("utf-8"),
             "midiDownloadUrl": midi_url,
+            "dspActions": dsp_actions,
         }
     except Exception as e:
         # CATCH ALL ERRORS HERE
@@ -240,6 +244,8 @@ def chat_reply(
     midi_output_dir = os.path.join(BASE_JOBS_DIR, "chat_midi")
     clean_reply, midi_filename = extract_and_generate_midi(reply, output_dir=midi_output_dir)
     
+    clean_reply, dsp_actions = extract_dsp_actions(clean_reply)
+    
     midi_url = None
     if midi_filename:
         # Return a relative path for the frontend to append to the base URL
@@ -255,7 +261,8 @@ def chat_reply(
 
     return {
         "reply": clean_reply,
-        "midiDownloadUrl": midi_url
+        "midiDownloadUrl": midi_url,
+        "dspActions": dsp_actions
     }
 
 @app.get("/api/jobs/{job_id}/analysis")
