@@ -65,6 +65,7 @@ class AudioJobPipeline:
         # unless explicitly requested or starting a new phase.
         
         # Check current status first
+        curr = {}
         try:
             if os.path.exists(self.status_path):
                 with open(self.status_path, "r") as f:
@@ -78,6 +79,7 @@ class AudioJobPipeline:
         except:
             pass
 
+        project_files = [f for f in os.listdir(self.job_dir) if f.endswith(".RPP")] if os.path.exists(self.job_dir) else []
         status = {
             "job_id": self.job_id,
             "state": state, # initialized, processing_stems, processing_midi, success, failed
@@ -88,9 +90,13 @@ class AudioJobPipeline:
             "artifacts": {
                 "stems": [f for f in os.listdir(self.stems_dir)] if os.path.exists(self.stems_dir) else [],
                 "midi": [f for f in os.listdir(self.midi_dir)] if os.path.exists(self.midi_dir) else [],
-                "analysis": [f for f in os.listdir(self.analysis_dir)] if os.path.exists(self.analysis_dir) else []
+                "analysis": [f for f in os.listdir(self.analysis_dir)] if os.path.exists(self.analysis_dir) else [],
+                "project": project_files
             }
         }
+        if "validation_report" in curr:
+            status["validation_report"] = curr["validation_report"]
+
         with open(self.status_path, "w") as f:
             json.dump(status, f, indent=4)
 
@@ -245,7 +251,11 @@ def start_processing_pipeline(job_id: str, separation_model: str = "demucs"):
         # 4. MIDI Validation (Phase 2B)
         if midi_summaries:
             pipeline.update_status("processing_midi", progress=85, message="Validating MIDI correctness with Gemini...")
-            validation_report = validate_midi_with_gemini("\n\n".join(midi_summaries))
+            try:
+                validation_report = validate_midi_with_gemini("\n\n".join(midi_summaries))
+            except Exception as val_err:
+                print(f"⚠️ Gemini MIDI validation skipped: {val_err}")
+                validation_report = f"MIDI validation skipped: {val_err}"
             
             # Store validation report in status.json
             current_status = pipeline.get_status()

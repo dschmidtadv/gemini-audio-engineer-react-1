@@ -23,18 +23,13 @@ def extract_midi_from_audio(audio_path: str, output_midi_path: str):
     Extract polyphonic MIDI from an audio file using Spotify's basic-pitch.
     """
     print(f"🎵 Extracting MIDI from: {audio_path}")
-    # predict returns a dictionary with 'midi' as a pretty_midi object
-    model_output = predict(
-        audio_path_list=[audio_path],
+    model_output, midi_data, note_events = predict(
+        audio_path=audio_path,
         model_or_model_path=_basic_pitch_model,
         onset_threshold=0.5,
         frame_threshold=0.3,
-        minimum_note_length=100, # ms
+        minimum_note_length=100,  # ms
     )
-    
-    # model_output is a dict-like object where keys are file paths
-    # The actual result is the first item in the list of results
-    midi_data = list(model_output.values())[0][1] # (model_output, midi_data, note_events)
     
     # Save the pretty_midi object
     midi_data.write(output_midi_path)

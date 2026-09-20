@@ -1,0 +1,44 @@
+{
+  "tempo": 120,
+  "time_signature": [4, 4],
+  "tracks": [
+    {
+      "instrument": "Warm Analog Pad",
+      "notes": [
+        {"pitch": 50, "velocity": 78, "start_time": 0.0, "duration": 4.0},
+        {"pitch": 53, "velocity": 78, "start_time": 0.0, "duration": 4.0},
+        {"pitch": 57, "velocity": 78, "start_time": 0.0, "duration": 4.0},
+        {"pitch": 62, "velocity": 78, "start_time": 0.0, "duration": 4.0},
+        {"pitch": 46, "velocity": 78, "start_time": 4.0, "duration": 4.0},
+        {"pitch": 50, "velocity": 78, "start_time": 4.0, "duration": 4.0},
+        {"pitch": 53, "velocity": 78, "start_time": 4.0, "duration": 4.0},
+        {"pitch": 58, "velocity": 78, "start_time": 4.0, "duration": 4.0},
+        {"pitch": 43, "velocity": 78, "start_time": 8.0, "duration": 4.0},
+        {"pitch": 46, "velocity": 78, "start_time": 8.0, "duration": 4.0},
+        {"pitch": 50, "velocity": 78, "start_time": 8.0, "duration": 4.0},
+        {"pitch": 55, "velocity": 78, "start_time": 8.0, "duration": 4.0},
+        {"pitch": 45, "velocity": 78, "start_time": 12.0, "duration": 4.0},
+        {"pitch": 49, "velocity": 78, "start_time": 12.0, "duration": 4.0},
+        {"pitch": 52, "velocity": 78, "start_time": 12.0, "duration": 4.0},
+        {"pitch": 57, "velocity": 78, "start_time": 12.0, "duration": 4.0}
+      ]
+    },
+    {
+      "instrument": "Ethereal Shimmer Pad",
+      "notes": [
+        {"pitch": 69, "velocity": 65, "start_time": 0.0, "duration": 4.0},
+        {"pitch": 74, "velocity": 65, "start_time": 0.0, "duration": 4.0},
+        {"pitch": 77, "velocity": 65, "start_time": 0.0, "duration": 4.0},
+        {"pitch": 65, "velocity": 65, "start_time": 4.0, "duration": 4.0},
+        {"pitch": 70, "velocity": 65, "start_time": 4.0, "duration": 4.0},
+        {"pitch": 74, "velocity": 65, "start_time": 4.0, "duration": 4.0},
+        {"pitch": 62, "velocity": 65, "start_time": 8.0, "duration": 4.0},
+        {"pitch": 67, "velocity": 65, "start_time": 8.0, "duration": 4.0},
+        {"pitch": 70, "velocity": 65, "start_time": 8.0, "duration": 4.0},
+        {"pitch": 64, "velocity": 65, "start_time": 12.0, "duration": 4.0},
+        {"pitch": 69, "velocity": 65, "start_time": 12.0, "duration": 4.0},
+        {"pitch": 73, "velocity": 65, "start_time": 12.0, "duration": 4.0}
+      ]
+    }
+  ]
+}

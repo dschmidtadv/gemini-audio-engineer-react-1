@@ -1,6 +1,7 @@
-import base64
 import os
 import tempfile
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "matplotlib"))
+import base64
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, UploadFile, Request, BackgroundTasks
@@ -20,7 +21,7 @@ from openai_client import (
     send_chat_message as openai_send_message,
 )
 from midi_engine import extract_and_generate_midi
-from audio_pipeline import AudioJobPipeline, start_processing_pipeline
+from audio_pipeline import AudioJobPipeline, start_processing_pipeline, BASE_JOBS_DIR
 from job_manager import run_heavy_task
 
 
@@ -41,8 +42,9 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Track which provider each session uses for follow-up routing
 _session_providers: dict[str, str] = {}  # session_id -> "gemini" | "openai"
 
-# Mount audio_jobs directory for artifact access (includes all jobs and their internal folders)
-app.mount("/audio_jobs", StaticFiles(directory="audio_jobs"), name="audio_jobs")
+# Ensure audio_jobs directory exists and mount for artifact access
+os.makedirs(BASE_JOBS_DIR, exist_ok=True)
+app.mount("/audio_jobs", StaticFiles(directory=BASE_JOBS_DIR), name="audio_jobs")
 
 
 # Dev CORS Next.js default
@@ -187,16 +189,25 @@ def analyze(
         if advice is None:
             raise Exception("AI Model returned no response. Check API Key and Model ID.")
 
+        # Parse and extract MIDI if the AI generated any
+        midi_output_dir = os.path.join(BASE_JOBS_DIR, "chat_midi")
+        clean_advice, midi_filename = extract_and_generate_midi(advice, output_dir=midi_output_dir)
+        
+        midi_url = None
+        if midi_filename:
+            midi_url = f"/audio_jobs/chat_midi/{midi_filename}"
+
         # Save AI Advice to Analysis Folder
         print(f"📝 Saving analysis advice for job {job_id}...")
-        pipeline.save_analysis(advice)
+        pipeline.save_analysis(clean_advice)
 
         print(f"✅ Analysis for job {job_id} complete. Returning response.")
         return {
             "sessionId": session_id,
             "job_id": job_id,
-            "advice": advice,
+            "advice": clean_advice,
             "spectrogramPngBase64": base64.b64encode(spec_png).decode("utf-8"),
+            "midiDownloadUrl": midi_url,
         }
     except Exception as e:
         # CATCH ALL ERRORS HERE
@@ -225,16 +236,26 @@ def chat_reply(
     if not reply:
         raise Exception("AI Model returned no response.")
 
+    # Parse and extract MIDI if the AI generated any
+    midi_output_dir = os.path.join(BASE_JOBS_DIR, "chat_midi")
+    clean_reply, midi_filename = extract_and_generate_midi(reply, output_dir=midi_output_dir)
+    
+    midi_url = None
+    if midi_filename:
+        # Return a relative path for the frontend to append to the base URL
+        midi_url = f"/audio_jobs/chat_midi/{midi_filename}"
+
     # If we have a jobId, save this follow-up advice
     if jobId:
         pipeline = AudioJobPipeline(jobId)
         # Append to advice instead of overwriting, or save as a separate follow-up
         advice_path = os.path.join(pipeline.analysis_dir, "advice.txt")
         with open(advice_path, "a", encoding="utf-8") as f:
-            f.write(f"\n\n--- Follow-up ---\nUser: {message}\nAI: {reply}")
+            f.write(f"\n\n--- Follow-up ---\nUser: {message}\nAI: {clean_reply}")
 
     return {
-        "reply": reply,
+        "reply": clean_reply,
+        "midiDownloadUrl": midi_url
     }
 
 @app.get("/api/jobs/{job_id}/analysis")

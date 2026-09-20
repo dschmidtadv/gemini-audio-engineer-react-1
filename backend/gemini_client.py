@@ -14,22 +14,71 @@ load_dotenv()
 # Dict[str, genai.chats.Chat]
 _sessions: Dict[str, object] = {}
 
-# Singleton client instance - keeps httpx connection alive across sessions
+# Cached client and key
 _client: Optional[genai.Client] = None
+_cached_api_key: Optional[str] = None
 
 
 def _get_client() -> genai.Client:
-    """Get or create a singleton Gemini client instance."""
-    global _client
-    if _client is None:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise RuntimeError(
-                "Missing GEMINI_API_KEY. Create backend/.env with:\n\n"
-                "GEMINI_API_KEY=YOUR_KEY_HERE\n"
-            )
+    """Get or create a Gemini client instance, updating if API key changes."""
+    global _client, _cached_api_key
+    load_dotenv(override=True)
+    
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or api_key == "YOUR_GEMINI_API_KEY_HERE":
+        raise RuntimeError(
+            "Missing or placeholder GEMINI_API_KEY. Update backend/.env with a valid key."
+        )
+        
+    if _client is None or _cached_api_key != api_key:
+        print("Initializing AI Studio client using API Key")
         _client = genai.Client(api_key=api_key)
+        _cached_api_key = api_key
+        
     return _client
+
+
+def _get_audio_part(client: genai.Client, audio_path: str) -> types.Part:
+    """Loads audio as inline Part first to avoid File API policy restrictions, falling back to Files API."""
+    ext = os.path.splitext(audio_path)[1].lower()
+    mime_map = {
+        ".wav": "audio/wav",
+        ".mp3": "audio/mp3",
+        ".flac": "audio/flac",
+        ".ogg": "audio/ogg",
+        ".m4a": "audio/m4a",
+        ".aac": "audio/aac",
+    }
+    mime_type = mime_map.get(ext, "audio/wav")
+
+    # 1. Prefer inline bytes: works with all API keys/policies, no separate upload request
+    try:
+        with open(audio_path, "rb") as f:
+            audio_bytes = f.read()
+        print(f"Loading inline audio: {len(audio_bytes)} bytes ({mime_type})")
+        return types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+    except Exception as e:
+        print(f"Inline audio read exception: {e}")
+
+    # 2. Fallback to Files API if local read failed
+    print(f"Uploading file via Files API: {audio_path}...")
+    uploaded_audio = client.files.upload(file=audio_path)
+
+    print(f"File uploaded: {uploaded_audio.name}. Waiting for processing...")
+    while True:
+        uploaded_audio = client.files.get(name=uploaded_audio.name)
+        state = uploaded_audio.state.name.upper() if hasattr(uploaded_audio.state, 'name') else str(uploaded_audio.state).upper()
+        if state == "ACTIVE":
+            print("Audio processing complete. File is ACTIVE.")
+            break
+        elif state == "FAILED":
+            raise ValueError(f"Google failed to process the audio file. State: {state}")
+        time.sleep(1)
+
+    return types.Part.from_uri(
+        file_uri=uploaded_audio.uri,
+        mime_type=uploaded_audio.mime_type or mime_type,
+    )
 
 
 def start_audio_chat_session(
@@ -47,30 +96,7 @@ def start_audio_chat_session(
     """
     client = _get_client()
 
-    print(f"Uploading file: {audio_path}...")
-    uploaded_audio = client.files.upload(file=audio_path)
-
-    print(f"File uploaded: {uploaded_audio.name}. Waiting for processing...")
-    while True:
-        # We must fetch the file again to get the updated state
-        uploaded_audio = client.files.get(name=uploaded_audio.name)
-        
-        # Check state (handles 'PROCESSING', 'ACTIVE', 'FAILED')
-        state = uploaded_audio.state.name.upper() if hasattr(uploaded_audio.state, 'name') else str(uploaded_audio.state).upper()
-        
-        if state == "ACTIVE":
-            print("Audio processing complete. File is ACTIVE.")
-            break
-        elif state == "FAILED":
-            raise ValueError(f"Google failed to process the audio file. State: {state}")
-        
-        # Wait 1 second before checking again
-        time.sleep(1)
-
-    audio_part = types.Part.from_uri(
-        file_uri=uploaded_audio.uri,
-        mime_type=uploaded_audio.mime_type or "audio/wav",
-    )
+    audio_part = _get_audio_part(client, audio_path)
 
     spectrogram_part = types.Part.from_bytes(
         data=spectrogram_png_bytes,
@@ -143,10 +169,15 @@ def validate_midi_with_gemini(midi_summaries: str) -> str:
     Reply with a concise critique and specific suggested corrections (e.g., 'Transpose Bass down 1 octave').
     """
     
-    # We use a simple generate call for this (non-audio context)
-    response = client.models.generate_content(
-        model="gemini-2.0-flash", # Use a fast model for validation
-        contents=prompt
-    )
-    
-    return response.text
+    # We use a generate call with model fallbacks
+    for model_name in ["gemini-3.6-flash", "gemini-1.5-flash"]:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+            if response and response.text:
+                return response.text
+        except Exception:
+            continue
+    raise RuntimeError("Could not connect to Gemini models for MIDI validation.")

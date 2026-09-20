@@ -1,4 +1,4 @@
-const API_BASE = "";
+const API_BASE = "http://localhost:8000";
 
 // Helper function to handle response errors safely
 async function handleResponse(res: Response, defaultMsg: string) {

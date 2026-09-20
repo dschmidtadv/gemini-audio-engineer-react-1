@@ -8,9 +8,12 @@ from typing import Tuple
 
 import librosa
 import librosa.display
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "matplotlib"))
 import matplotlib
 # Force non-interactive backend (Must be before importing pyplot)
 matplotlib.use('Agg')
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -155,7 +158,8 @@ def separate_stems_umx(input_path: str, output_dir: str) -> bool:
         # --device: Use CUDA if detected
         # -o output_dir: Output base directory
         cmd = [
-            sys.executable, "-m", "openunmix.cli",
+            sys.executable, "-c",
+            "import sys; from openunmix.cli import separate; separate()",
             input_path,
             "--model", "umxhq",
             "--device", DEVICE,

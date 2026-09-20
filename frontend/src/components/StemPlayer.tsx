@@ -21,60 +21,128 @@ export default function StemPlayer({ stems }: StemPlayerProps) {
     const [mutes, setMutes] = useState<boolean[]>(new Array(stems.length).fill(false));
     const [solos, setSolos] = useState<boolean[]>(new Array(stems.length).fill(false));
 
+    const stemsKey = stems.map(s => `${s.name}:${s.url}`).join("|");
+
     useEffect(() => {
+        let isCancelled = false;
+
+        // Reset state arrays when stems count or list changes
+        setIsReady(new Array(stems.length).fill(false));
+        setVolumes(new Array(stems.length).fill(1));
+        setMutes(new Array(stems.length).fill(false));
+        setSolos(new Array(stems.length).fill(false));
+        setIsPlaying(false);
+
+        // Destroy previous instances
+        wsInstances.current.forEach(inst => {
+            try {
+                inst?.destroy();
+            } catch (e) {}
+        });
+        wsInstances.current = new Array(stems.length).fill(null);
+
         // Initialize WaveSurfer for each stem
         stems.forEach((stem, index) => {
-            if (!containersRef.current[index]) return;
+            const container = containersRef.current[index];
+            if (!container) return;
 
-            const ws = WaveSurfer.create({
-                container: containersRef.current[index]!,
-                height: 60,
-                progressColor: "#818cf8",
-                waveColor: "#475569",
-                barWidth: 2,
-                cursorColor: "#2dd4bf",
-                normalize: true,
-            });
-
-            ws.load(stem.url);
-            wsInstances.current[index] = ws;
-
-            ws.on("ready", () => {
-                setIsReady(prev => {
-                    const next = [...prev];
-                    next[index] = true;
-                    return next;
+            try {
+                container.innerHTML = "";
+                const ws = WaveSurfer.create({
+                    container,
+                    height: 60,
+                    progressColor: "#818cf8",
+                    waveColor: "#475569",
+                    barWidth: 2,
+                    cursorColor: "#2dd4bf",
+                    normalize: true,
                 });
-            });
 
-            ws.on("error", (err) => {
-                console.error(`❌ WaveSurfer Error for stem ${stem.name}:`, err);
-            });
+                wsInstances.current[index] = ws;
 
-            // Sync playback across all instances
-            ws.on("interaction", () => {
-                const time = ws.getCurrentTime();
-                wsInstances.current.forEach(inst => inst?.seekTo(time / inst.getDuration()));
-            });
+                ws.on("ready", () => {
+                    if (isCancelled) return;
+                    setIsReady(prev => {
+                        const next = [...prev];
+                        next[index] = true;
+                        return next;
+                    });
+                });
+
+                ws.on("error", (err: any) => {
+                    if (err?.name === "AbortError" || String(err).includes("aborted")) {
+                        return;
+                    }
+                    console.warn(`WaveSurfer Error for stem ${stem.name}:`, err);
+                });
+
+                // Sync playback across all instances
+                ws.on("interaction", () => {
+                    if (isCancelled) return;
+                    const dur = ws.getDuration();
+                    if (dur > 0) {
+                        const time = ws.getCurrentTime();
+                        const progress = time / dur;
+                        wsInstances.current.forEach(inst => {
+                            if (inst && inst !== ws) {
+                                try {
+                                    inst.seekTo(progress);
+                                } catch (e) {}
+                            }
+                        });
+                    }
+                });
+
+                const loadPromise = ws.load(stem.url);
+                if (loadPromise && typeof (loadPromise as any).catch === "function") {
+                    (loadPromise as any).catch((err: any) => {
+                        if (err?.name === "AbortError" || String(err).includes("aborted")) {
+                            return;
+                        }
+                        console.warn(`WaveSurfer load error for stem ${stem.name}:`, err);
+                    });
+                }
+            } catch (e: any) {
+                if (e?.name !== "AbortError" && !String(e).includes("aborted")) {
+                    console.warn(`WaveSurfer init exception for stem ${stem.name}:`, e);
+                }
+            }
         });
 
         return () => {
-            wsInstances.current.forEach(inst => inst?.destroy());
+            isCancelled = true;
+            wsInstances.current.forEach(inst => {
+                try {
+                    inst?.destroy();
+                } catch (e) {}
+            });
             wsInstances.current = [];
         };
-    }, [stems]);
+    }, [stemsKey]);
 
     const togglePlay = () => {
         const nextPlaying = !isPlaying;
         setIsPlaying(nextPlaying);
-        wsInstances.current.forEach(inst => nextPlaying ? inst?.play() : inst?.pause());
+        wsInstances.current.forEach(inst => {
+            if (inst) {
+                try {
+                    if (nextPlaying) {
+                        inst.play();
+                    } else {
+                        inst.pause();
+                    }
+                } catch (e) {}
+            }
+        });
     };
 
     const toggleMute = (index: number) => {
         const nextMutes = [...mutes];
         nextMutes[index] = !nextMutes[index];
         setMutes(nextMutes);
-        wsInstances.current[index]?.setMuted(nextMutes[index]);
+        try {
+            wsInstances.current[index]?.setMuted(nextMutes[index]);
+        } catch (e) {}
     };
 
     const toggleSolo = (index: number) => {
@@ -86,11 +154,14 @@ export default function StemPlayer({ stems }: StemPlayerProps) {
         // If no solos active, all non-muted tracks play.
         const isAnySolo = nextSolos.some(s => s);
         wsInstances.current.forEach((inst, i) => {
-            if (isAnySolo) {
-                inst?.setVolume(nextSolos[i] ? volumes[i] : 0);
-            } else {
-                inst?.setVolume(mutes[i] ? 0 : volumes[i]);
-            }
+            if (!inst) return;
+            try {
+                if (isAnySolo) {
+                    inst.setVolume(nextSolos[i] ? volumes[i] : 0);
+                } else {
+                    inst.setVolume(mutes[i] ? 0 : volumes[i]);
+                }
+            } catch (e) {}
         });
     };
 
@@ -99,7 +170,9 @@ export default function StemPlayer({ stems }: StemPlayerProps) {
         nextVolumes[index] = val;
         setVolumes(nextVolumes);
         if (!mutes[index] && (!solos.some(s => s) || solos[index])) {
-            wsInstances.current[index]?.setVolume(val);
+            try {
+                wsInstances.current[index]?.setVolume(val);
+            } catch (e) {}
         }
     };
 

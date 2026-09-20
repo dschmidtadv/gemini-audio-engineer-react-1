@@ -19,7 +19,7 @@ interface ChatMessage {
 export default function Page() {
     const [file, setFile] = useState<File | null>(null);
     const [selection, setSelection] = useState({ startSec: 0, endSec: 0, durationSec: 0 });
-    const [modelId, setModelId] = useState("gemini-3-pro-preview");
+    const [modelId, setModelId] = useState("gemini-3.6-flash");
     const [temperature, setTemperature] = useState(0.2);
     const [thinkingBudget, setThinkingBudget] = useState(0);
     const [mode, setMode] = useState("engineer");
@@ -60,6 +60,14 @@ export default function Page() {
 
     const chatEndRef = useRef<HTMLDivElement>(null);
 
+    const stemArtifacts = jobStatus?.artifacts?.stems;
+    const memoizedStems = useMemo(() => {
+        if (!stemArtifacts || !Array.isArray(stemArtifacts) || !jobId) return [];
+        return stemArtifacts.map((s: string) => ({
+            name: s.replace(".wav", ""),
+            url: `http://localhost:8000/audio_jobs/${jobId}/stems/${s}`
+        }));
+    }, [stemArtifacts, jobId]);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -150,6 +158,7 @@ export default function Page() {
             setChatMessages(prev => [...prev, {
                 role: "model",
                 text: data.reply,
+                midiDownloadUrl: data.midiDownloadUrl
             }]);
         } catch (e: any) {
             setError(e?.message || String(e));
@@ -268,26 +277,21 @@ export default function Page() {
                             <div>
                                 <label>Model</label>
                                 <select value={modelId} onChange={(e) => setModelId(e.target.value)}>
-                                    {/* Option 1: The Reliable Workhorses (Use these to avoid errors) */}
-                                    <optgroup label="Recommended (Stable & Fast)">
-                                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Best Balance)</option>
-                                        <option value="gemini-2.0-flash-lite-preview-02-05">Gemini 2.0 Flash Lite (Fastest)</option>
-                                    </optgroup>
-
-                                    {/* Option 2: High Intelligence (May hit rate limits) */}
-                                    <optgroup label="High Intelligence (Pro)">
-                                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                    {/* Option 1: The Reliable Workhorses (Recommended) */}
+                                    <optgroup label="Recommended (Fast & Multi-modal)">
+                                        <option value="gemini-3.6-flash">Gemini 3.6 Flash (Default)</option>
+                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                                         <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                                     </optgroup>
 
-                                    {/* Option 3: Experimental / Bleeding Edge (Expect 429 Errors) */}
-                                    <optgroup label="Experimental (Low Rate Limits)">
-                                        <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
-                                        <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
-                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Experimental</option>
+                                    {/* Option 2: High Intelligence (Pro) */}
+                                    <optgroup label="High Intelligence (Pro)">
+                                        <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                                     </optgroup>
 
-                                    {/* Option 4: Open Models (Text Focused) */}
+                                    {/* Option 3: Open Models */}
                                     <optgroup label="Open Models">
                                         <option value="gemma-3-27b-it">Gemma 3 (27B)</option>
                                     </optgroup>
@@ -407,10 +411,7 @@ export default function Page() {
                                     {jobStatus.state === "success" && (
                                         <div className="stack" style={{ marginTop: '20px', gap: '24px' }}>
                                             <StemPlayer
-                                                stems={jobStatus.artifacts.stems.map((s: string) => ({
-                                                    name: s.replace(".wav", ""),
-                                                    url: `http://localhost:8000/audio_jobs/${jobId}/stems/${s}`
-                                                }))}
+                                                stems={memoizedStems}
                                             />
 
                                             <MidiPreview
