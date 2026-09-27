@@ -56,3 +56,9 @@ If you want to train the AI to focus on specific genres or add new DSP tools, ch
 This backend is designed to work in tandem with the **Gemini Audio Engineer AUv3 Plugin** (for Logic Pro and other Apple DAWs). 
 You can find the plugin repository and installation instructions here:
 👉 **[gemini-au-plugin Repository](https://github.com/dschmidtadv/gemini-au-plugin)**
+
+## 🙏 Acknowledgements & Attribution
+
+This project is a collaborative fork extending the work of:
+- **[Anthony Galati (@adgalati)](https://github.com/adgalati):** Original creator of [gemini-audio-engineer-react](https://github.com/adgalati/gemini-audio-engineer-react), who created the core architecture bridging DAWs and Google's Gemini AI.
+- **[Maui-B](https://github.com/Maui-B):** Major contributor who enhanced the audio processing pipeline with Demucs stem separation and multi-phase workflows.
