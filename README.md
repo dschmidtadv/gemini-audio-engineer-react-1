@@ -42,7 +42,14 @@ uvicorn app:app --reload --port 8000
 ```
 The AUv3 plugin automatically polls `http://localhost:8000/health` to confirm the connection.
 
-## 🧩 Modifying the AI Prompts
+## 🧩 Operating Modes & Prompts
+
+The backend provides three specialized system prompt personas located in `backend/prompts.py`:
+
+- **🎧 Engineer Mode (`ENGINEER_PROMPT`):** Acts as a mixing and mastering consultant. Analyzes the audio and spectrogram to deliver technical critiques and advice on spectral masking, dynamic headroom, and tonal balance. It produces pure text guidance without DSP actions.
+- **🎹 Producer Mode (`PRODUCER_PROMPT`):** Acts as an arranger and songwriter. Receives detected BPM and harmonic chord progressions, suggesting complementary instruments, layers, and counter-melodies. Employs the **MIDI Output Protocol** to return structured musical data in `<MIDI_DATA>` tags for automatic `.mid` file compilation.
+- **⚡ Executor Mode (`EXECUTOR_PROMPT`):** The automated DSP execution engine. Diagnoses mix problems, provides technical reasoning, and generates strict, structured `<DSP_ACTIONS>` tags (EQ, Compression, De-esser, Saturation, Reverb, Stereo width). **This is the only mode that enables the "Apply AI Mix" / "Apply These Mix Changes" buttons** in the AUv3 plugin and web interface.
+
 If you want to train the AI to focus on specific genres or add new DSP tools, check out `backend/prompts.py` and `backend/dsp_parser.py`. The AI has been heavily tuned to provide conservative, realistic mixing moves rather than destructive changes.
 
 ## 🔌 DAW Integration (AUv3 Plugin)
