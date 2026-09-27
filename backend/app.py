@@ -197,9 +197,7 @@ def analyze(
             if final_chords and final_bpm:
                 musical_context = format_chords_for_llm(final_chords, final_bpm)
         
-        enhanced_prompt = f"{musical_context}
-
-{prompt}" if musical_context else prompt
+        enhanced_prompt = f"{musical_context}\n\n{prompt}" if musical_context else prompt
 
         if modelId.startswith("gpt-"):
             session_id, advice = openai_start_session(
