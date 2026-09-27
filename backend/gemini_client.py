@@ -31,8 +31,8 @@ def _get_client() -> genai.Client:
         )
         
     if _client is None or _cached_api_key != api_key:
-        print("Initializing AI Studio client using API Key")
-        _client = genai.Client(api_key=api_key)
+        print("Initializing AI Studio client using API Key (with extended timeout)")
+        _client = genai.Client(api_key=api_key, http_options={'timeout': 300000})
         _cached_api_key = api_key
         
     return _client

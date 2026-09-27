@@ -41,7 +41,15 @@ export default function Page() {
         "Suggest synth textures or pad layers for depth."
     ];
 
-    const SUGGESTIONS = mode === "engineer" ? ENGINEER_SUGGESTIONS : PRODUCER_SUGGESTIONS;
+    const DARKWAVE_SUGGESTIONS = [
+        "Process this drum stem to sound like an 80s drum machine.",
+        "Convert this bass stem into a rigid 16th-note synth sequence.",
+        "Turn this guitar into a dark, pulsing atmospheric texture.",
+        "Apply a darkwave pitch-shift and slap delay to these vocals.",
+        "Give this track a relentless, industrial synth-punk feel."
+    ];
+
+    const SUGGESTIONS = mode === "engineer" ? ENGINEER_SUGGESTIONS : (mode === "producer" ? PRODUCER_SUGGESTIONS : DARKWAVE_SUGGESTIONS);
     const [spectrogramB64, setSpectrogramB64] = useState("");
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -255,7 +263,7 @@ export default function Page() {
                 </div>
                 <div className="stack">
                     <section className="card stack">
-                        <div className="row" style={{ gridTemplateColumns: "1fr 1fr", gap: '8px', marginBottom: '12px' }}>
+                        <div className="row" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: '8px', marginBottom: '12px' }}>
                             <button
                                 className={`btn ${mode === "engineer" ? "" : "secondary"}`}
                                 onClick={() => !sessionId && setMode("engineer")}
@@ -271,6 +279,14 @@ export default function Page() {
                                 style={{ opacity: sessionId ? 0.6 : 1 }}
                             >
                                 🎹 Producer
+                            </button>
+                            <button
+                                className={`btn ${mode === "darkwave" ? "" : "secondary"}`}
+                                onClick={() => !sessionId && setMode("darkwave")}
+                                disabled={!!sessionId}
+                                style={{ opacity: sessionId ? 0.6 : 1 }}
+                            >
+                                🦇 Darkwave
                             </button>
                         </div>
                         <div className="row" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: '12px' }}>
@@ -496,7 +512,7 @@ export default function Page() {
                         )}
                     </section>
                     <section className="card chat-container">
-                        <label>{mode === "engineer" ? "Engineer Consultation" : "Producer Session"}</label>
+                        <label>{mode === "engineer" ? "Engineer Consultation" : (mode === "producer" ? "Producer Session" : "Darkwave AI")}</label>
                         <div className="chat-messages">
                             {chatMessages.length === 0 && (
                                 <div className="muted" style={{ textAlign: "center", marginTop: "40px" }}>
@@ -506,7 +522,7 @@ export default function Page() {
                             {chatMessages.map((msg, idx) => (
                                 <div key={idx} className={`message ${msg.role}`}>
                                     <div className="message-label">
-                                        {msg.role === "user" ? "You" : (mode === "engineer" ? "Engineer" : "Producer")}
+                                        {msg.role === "user" ? "You" : (mode === "engineer" ? "Engineer" : (mode === "producer" ? "Producer" : "Darkwave AI"))}
                                     </div>
                                     <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
                                     {msg.midiDownloadUrl && (
