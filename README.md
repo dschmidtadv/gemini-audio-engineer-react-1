@@ -7,8 +7,10 @@ This repository contains the intelligence layer for the **Gemini Audio Engineer*
 When the AUv3 plugin captures audio from your DAW, it sends it here. This backend handles:
 1. **Audio Processing:** Slicing, normalizing, and generating detailed spectrograms of the captured audio.
 2. **AI Inference:** Packaging the audio context and spectrograms and sending them to Gemini with specialized Mixing, Producing, and Executing prompts.
-3. **DSP Parsing:** Converting the AI's natural language mixing advice into a strict, structured JSON payload.
-4. **Delivery:** Serving that JSON back to the AUv3 plugin so it can instantly apply the EQ, Compression, Saturation, De-essing, and Reverb parameters to your track.
+3. **Chord & Tempo Detection:** Automatically analyzes incoming audio (via Chordino) to give the AI full musical context.
+4. **MIDI Generation:** Parsing rhythmic and melodic concepts proposed by the AI to generate downloadable `.mid` files.
+5. **DSP Parsing:** Converting the AI's natural language mixing advice into a strict, structured JSON payload.
+6. **Delivery:** Serving that JSON and MIDI back to the AUv3 plugin so it can instantly apply the EQ, Compression, Saturation, De-essing, and Reverb parameters to your track.
 
 ## 🚀 Getting Started
 
