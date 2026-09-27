@@ -24,7 +24,8 @@ from midi_engine import extract_and_generate_midi
 from dsp_parser import extract_dsp_actions
 from audio_pipeline import AudioJobPipeline, start_processing_pipeline, BASE_JOBS_DIR
 from job_manager import run_heavy_task
-
+from tempo_analyzer import detect_tempo
+from chordino import extract_chords, chords_to_beats, format_chords_for_llm
 
 
 app = FastAPI(title="Gemini Audio Engineer API")
@@ -124,13 +125,25 @@ def spectrogram(
     endSec: float = Form(...),
 ):
     """
-    Returns a Mel spectrogram PNG (base64) for the selected region.
+    Returns a Mel spectrogram PNG (base64), detected BPM, and chord progression.
     This does NOT call Gemini — it's just a preview.
     """
     original_path = _save_upload_to_temp(file)
     trimmed_path = trim_audio_to_temp(original_path, startSec, endSec, export_format="wav")
     spec_png = generate_mel_spectrogram_png(trimmed_path)
-    return {"spectrogramPngBase64": base64.b64encode(spec_png).decode("utf-8")}
+    
+    # Detect tempo
+    bpm, beat_times = detect_tempo(trimmed_path)
+    
+    # Extract chords and convert to beat-based format
+    raw_chords = extract_chords(trimmed_path)
+    chords = chords_to_beats(raw_chords, bpm)
+    
+    return {
+        "spectrogramPngBase64": base64.b64encode(spec_png).decode("utf-8"),
+        "bpm": round(bpm, 1),
+        "chords": chords
+    }
 
 
 @app.post("/api/analyze")
@@ -144,17 +157,14 @@ def analyze(
     thinkingBudget: int = Form(0),
     mode: str = Form("engineer"),
     job_id: Optional[str] = Form(None),
+    bpm: Optional[float] = Form(None),
+    chords: Optional[str] = Form(None),
 ):
     if job_id in ["undefined", "null", "None", ""]:
         job_id = None
     
     print(f"📥 Received /api/analyze request for job_id: {job_id}")
     try:
-        """
-        Trims audio, generates spectrogram, starts Chat Session with Gemini or OpenAI.
-        Everything is consolidated under audio_jobs/<job_id>/.
-        Returns initial advice + job_id as session ID.
-        """
         original_path = _save_upload_to_temp(file)
         trimmed_path = trim_audio_to_temp(original_path, startSec, endSec, export_format="wav")
         spec_png = generate_mel_spectrogram_png(trimmed_path)
@@ -163,12 +173,39 @@ def analyze(
         pipeline = AudioJobPipeline(job_id)
         job_id = pipeline.initialize_job(original_path) # Ensure input.wav exists in job folder
 
-        # Route to appropriate provider based on model ID
+        import json
+        musical_context = ""
+        final_bpm = bpm
+        final_chords = []
+        
+        if mode == "producer":
+            if chords:
+                try:
+                    final_chords = json.loads(chords)
+                except json.JSONDecodeError:
+                    final_chords = []
+            
+            if not final_bpm or not final_chords:
+                detected_bpm, beat_times = detect_tempo(trimmed_path)
+                raw_chords = extract_chords(trimmed_path)
+                
+                if not final_bpm:
+                    final_bpm = detected_bpm
+                if not final_chords:
+                    final_chords = chords_to_beats(raw_chords, detected_bpm)
+            
+            if final_chords and final_bpm:
+                musical_context = format_chords_for_llm(final_chords, final_bpm)
+        
+        enhanced_prompt = f"{musical_context}
+
+{prompt}" if musical_context else prompt
+
         if modelId.startswith("gpt-"):
             session_id, advice = openai_start_session(
                 audio_path=trimmed_path,
                 spectrogram_png_bytes=spec_png,
-                user_prompt=prompt,
+                user_prompt=enhanced_prompt,
                 model_id=modelId,
                 temperature=float(temperature),
                 mode=mode,
@@ -178,7 +215,7 @@ def analyze(
             session_id, advice = gemini_start_session(
                 audio_path=trimmed_path,
                 spectrogram_png_bytes=spec_png,
-                user_prompt=prompt,
+                user_prompt=enhanced_prompt,
                 model_id=modelId,
                 temperature=float(temperature),
                 thinking_budget=thinkingBudget,
@@ -186,21 +223,16 @@ def analyze(
             )
             _session_providers[session_id] = "gemini"
 
-        # Check for Empty Response
         if advice is None:
             raise Exception("AI Model returned no response. Check API Key and Model ID.")
 
-        # Parse and extract MIDI if the AI generated any
         midi_output_dir = os.path.join(BASE_JOBS_DIR, "chat_midi")
         clean_advice, midi_filename = extract_and_generate_midi(advice, output_dir=midi_output_dir)
         
         clean_advice, dsp_actions = extract_dsp_actions(clean_advice)
 
-        midi_url = None
-        if midi_filename:
-            midi_url = f"/audio_jobs/chat_midi/{midi_filename}"
+        midi_url = f"/audio_jobs/chat_midi/{midi_filename}" if midi_filename else None
 
-        # Save AI Advice to Analysis Folder
         print(f"📝 Saving analysis advice for job {job_id}...")
         pipeline.save_analysis(clean_advice)
 
@@ -212,11 +244,11 @@ def analyze(
             "spectrogramPngBase64": base64.b64encode(spec_png).decode("utf-8"),
             "midiDownloadUrl": midi_url,
             "dspActions": dsp_actions,
+            "bpm": final_bpm,
+            "chords": final_chords,
         }
     except Exception as e:
-        # CATCH ALL ERRORS HERE
         print(f"Error in analyze endpoint: {e}")
-        # Return a 400 Bad Request with the EXACT error message from Python
         return JSONResponse(
             status_code=400, 
             content={"detail": str(e)} 
